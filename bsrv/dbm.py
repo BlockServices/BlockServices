@@ -13,21 +13,24 @@ class UserAlreadyExists(Exception):
     pass
 
 class DBM:
-    def __init__(self, db_file: str="db.db", projects_path: str="projects/project_") -> None:
+    def __init__(self, db_file: str="db.db",
+                 projects_path: str="data/projects/project_",
+                 avatars_path: str="data/projects/avatars/usr_") -> None:
         self.db_file = db_file
         self.projects_path = projects_path
+        self.avatars_path = avatars_path
         self.__create_tables()
 
     def __cursor_and_connection(self) -> tuple[sqlite3.Cursor, sqlite3.Connection]:
         connection = sqlite3.connect(self.db_file)
         return connection.cursor(), connection
 
-    def __write_to_file(self, pid: int, data: bytes):
-        with open(self.projects_path + str(pid), "wb+") as f:
+    def __write_to_file(self, path: str, data: bytes):
+        with open(path, "wb+") as f:
             f.write(data)
 
-    def __read_from_file(self, pid: int) -> bytes:
-        with open(self.projects_path + str(pid), "rb") as f:
+    def __read_from_file(self, path: str) -> bytes:
+        with open(path, "rb") as f:
             return f.read()
 
     def __create_tables(self) -> None:
@@ -41,6 +44,7 @@ class DBM:
                           created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                           is_public BOOLEAN NOT NULL DEFAULT FALSE,
                           FOREIGN KEY(author_id) REFERENCES users(id) ON DELETE CASCADE);""")
+        cur.execute("""""")
 
         cur.execute("""CREATE TABLE IF NOT EXISTS users(
                           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,7 +108,7 @@ class DBM:
             cur.execute("""SELECT COUNT(*) FROM reactions
                                WHERE project_id = ? AND type = ?;""", (project_id, "fav"))
             favorites = cur.fetchone()[0]
-            file = base64.b64encode(self.__read_from_file(project_id)).decode()
+        file = base64.b64encode(self.__read_from_file(self.projects_path + str(project_id))).decode()
         return {"id": result[0],
                 "name": result[1],
                 "description": result[2],
@@ -122,9 +126,14 @@ class DBM:
         with conn:
             cur.execute("""SELECT * FROM users WHERE id = ?;""", (user_id,))
             result = cur.fetchone()
+        try:
+            avatar = base64.b64encode(self.__read_from_file(self.avatars_path + str(user_id))).decode()
+        except FileNotFoundError:
+            avatar = None
         return {"id": result[0],
                 "username": result[1],
                 "name": result[2],
+                "avatar": avatar,
                 "email": result[3],
                 "password_hash": result[4],
                 "created_at": result[5],
@@ -142,7 +151,7 @@ class DBM:
                            (name, description, author_id, is_public))
             pid = cur.fetchone()[0]
             try:
-                self.__write_to_file(pid, base64.b64decode(file))
+                self.__write_to_file(self.projects_path + str(pid), base64.b64decode(file))
             except Exception as e:
                 conn.rollback()
                 raise e
@@ -161,6 +170,12 @@ class DBM:
             uid = cur.fetchone()[0]
             conn.commit()
         return uid
+    
+    def set_avatar(self, uid, avatar: str):
+        if not self.__does_user_exist(uid):
+            raise UserDoesntExist
+        file_data = base64.b64encode(avatar.encode())
+        self.__write_to_file(self.avatars_path + str(uid), file_data)
     
     def get_all_users(self)-> list[dict[str, Any]]:
         cur, conn = self.__cursor_and_connection()
@@ -203,4 +218,13 @@ class DBM:
         with conn:
             cur.execute("BEGIN TRANSACTION;")
             cur.execute("UPDATE users SET is_admin = ? WHERE id = ?;", (status, uid))
+            conn.commit()
+    
+    def change_user_banned_status(self, uid: int, status: bool):
+        if not self.__does_user_exist(uid):
+            raise UserDoesntExist
+        cur, conn = self.__cursor_and_connection()
+        with conn:
+            cur.execute("BEGIN TRANSACTION;")
+            cur.execute("UPDATE users SET is_banned = ? WHERE id = ?;", (status, uid))
             conn.commit()

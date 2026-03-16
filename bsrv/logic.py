@@ -7,6 +7,8 @@ import jwt
 
 dbm = DBM()
 
+class NothingChangedException(Exception):
+    pass
 
 async def create_access_token(data: dict, expires_time: int, secret_key: str)-> str:
     to_encode = data.copy()
@@ -56,12 +58,24 @@ async def is_admin(user_id: int) -> bool:
 
 async def promote_user(username: str):
     uid = dbm.get_user_id(username)
-    dbm.change_user_admin_status(uid, True)
+    if dbm.get_user(uid)["is_banned"]:
+        dbm.change_user_banned_status(uid, False)
+    elif not dbm.get_user(uid)["is_admin"]:
+        dbm.change_user_admin_status(uid, True)
+    else:
+        raise NothingChangedException
     
     
 async def demote_user(username: str):
     uid = dbm.get_user_id(username)
-    dbm.change_user_admin_status(uid, False)
+    if uid == 1:
+        raise PermissionError
+    if dbm.get_user(uid)["is_admin"]:
+        dbm.change_user_admin_status(uid, False)
+    elif not dbm.get_user(uid)["is_banned"]:
+        dbm.change_user_banned_status(uid, True)
+    else:
+        raise NothingChangedException
 
 
 async def load_project(uid: int, name: str, description: str, file: str, is_public: bool) -> int:

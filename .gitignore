@@ -163,7 +163,7 @@ cython_debug/
 .idea
 
 db.db
-projects/
+data/
 test.db
 start.sh
 setup.sh

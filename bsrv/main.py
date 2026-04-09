@@ -68,7 +68,7 @@ class UserCreate(BaseModel):
 
 
 class UserLogin(BaseModel):
-    username: str = Field(description="Unique username")
+    username: str = Field(description="Unique username", examples=["user123", "MarkusPerson", "DBDev"])
     password: str
 
 
@@ -82,43 +82,51 @@ class JWTResponse(BaseModel):
 
 
 class PublicUserData(BaseModel):
-    uid: int = Field(description="Unique user id", examples=[1, 2, 3])
-    username: str = Field(description="Unique username", examples=["user123", "MarkusPerson", "DBDev"])
-    name: str = Field(description="Display name", examples=["User 123", "Markus Person", "DBDev - best user ever"])
-    avatar: str | None = Field(description="Base64 encoded jpg image")
-    is_banned: bool = Field(description="Is user banned", examples=[True, False])
-    created_at: str = Field(description="Registration date")
-    is_admin: bool = Field(description="Is user admin")
-
-
-class UserDataResponse(BaseModel):
     id: int = Field(description="Unique user id", examples=[1, 2, 3])
     username: str = Field(description="Unique username", examples=["user123", "MarkusPerson", "DBDev"])
     name: str = Field(description="Display name", examples=["User 123", "Markus Person", "DBDev - best user ever"])
-    avatar: str | None = Field(description="Base64 encoded jpg image")
+    description: Optional[str] = Field(description="User description", default=None)
+    avatar: Optional[str] = Field(description="Base64 encoded jpg image")
+    is_banned: bool = Field(description="Is user banned", examples=[True, False])
+    created_at: str = Field(description="Registration date")
+    is_admin: bool = Field(description="Is user admin", examples=[True, False])
+
+
+class AllUserData(BaseModel):
+    id: int = Field(description="Unique user id", examples=[1, 2, 3])
+    username: str = Field(description="Unique username", examples=["user123", "MarkusPerson", "DBDev"])
+    name: str = Field(description="Display name", examples=["User 123", "Markus Person", "DBDev - best user ever"])
+    avatar: Optional[str] = Field(description="Base64 encoded jpg image", default=None)
+    description: Optional[str] = Field(description="User description", default=None)
     email: str = Field(description="User email", examples=["dbdev@gmail.com", "vasa.belkin@yandex.ru"])
     created_at: str = Field(description="Registration date")
-    is_admin: bool = Field(description="Is user admin")
-    is_banned: bool = Field(description="Is user banned")
+    is_admin: bool = Field(description="Is user admin", examples=[True, False])
+    is_banned: bool = Field(description="Is user banned", examples=[True, False])
+
+
+class UserEditData(BaseModel):
+    name: Optional[str] = Field(description="Display name", default=None, examples=["User 123", "Markus Person", "DBDev - best user ever"])
+    avatar: Optional[str] = Field(description="Base64 encoded jpg image", default=None)
+    description: Optional[str] = Field(description="User description", default=None)
 
 
 class ProjectCreate(BaseModel):
-    name: str = Field(description="Project name")
-    description: str = Field(description="Project description")
+    name: str = Field(description="Project name", examples=["Project 123", "Kitten Parkour", "Untitled-1"])
+    description: str = Field(description="Project description", examples=["Best project, controls - ..."])
     file: str = Field(description="Project file in base64 format")
     is_public: bool = Field(description="Is project public", examples=[True, False])
 
 
 class ProjectData(BaseModel):
-    name: str = Field(description="Project name")
-    description: str = Field(description="Project description")
-    author: str = Field(description="Project author")
+    name: str = Field(description="Project name", examples=["Project 123", "Kitten Parkour", "Untitled-1"])
+    description: str = Field(description="Project description", examples=["Best project, controls - ..."])
+    author: str = Field(description="Project author", examples=["user123", "MarkusPerson", "DBDev"])
     file: str = Field(description="Project file in base64 format")
     created_at: str = Field(description="Project creation date")
     is_public: bool = Field(description="Is project public", examples=[True, False])
 
 
-async def get_current_user(token) ->  int:
+async def get_current_user(token: str) ->  int:
     credentials_exception = fastapi.HTTPException(
             status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials"
@@ -126,12 +134,48 @@ async def get_current_user(token) ->  int:
     try:
         uid = await lg.get_uid_from_token(token, JWT_SECRET)
         if uid is None:
-            print("No uid")
             raise credentials_exception
     except InvalidTokenError:
-        print("Wrong token")
         raise credentials_exception
     return int(uid)
+
+
+async def is_admin(token: str):
+    uid = await get_current_user(token)
+    return lg.dbm.get_user(uid)["is_admin"]
+
+
+async def is_banned(uid: int) -> bool:
+    return lg.dbm.get_user(uid)["is_banned"]
+
+
+async def get_public_user_data(uid: int) -> PublicUserData:
+    result = lg.dbm.get_user(uid)
+    return PublicUserData(
+        id=result["id"],
+        username=result["username"],
+        name=result["name"],
+        avatar=result["avatar"],
+        description=result["description"],
+        created_at=result["created_at"],
+        is_admin=result["is_admin"],
+        is_banned=result["is_banned"],
+    )
+
+
+async def get_all_user_data(uid: int) -> AllUserData:
+    result = lg.dbm.get_user(uid)
+    return AllUserData(
+            id=result["id"],
+            username=result["username"],
+            name=result["name"],
+            avatar=result["avatar"],
+            description=result["description"],
+            email=result["email"],
+            created_at=result["created_at"],
+            is_admin=result["is_admin"],
+            is_banned=result["is_banned"],
+            )
 
 
 @app.get("/")
@@ -183,15 +227,13 @@ async def login(user: UserLogin, request: Request):
 async def get_user(username: str, request: Request):
      try:
          uid = lg.dbm.get_user_id(username)
-         result = lg.dbm.get_user(uid)
      except UserDoesntExist:
          raise fastapi.HTTPException(status_code=404, detail="User doesn't exist")
      logger.log(20, f"Successfully get public user data {username}")
-     return PublicUserData(uid=result["id"], username=result["username"], name=result["name"], avatar=result["avatar"],
-                           is_banned=result["is_banned"], created_at=result["created_at"], is_admin=result["is_admin"])
+     return await get_public_user_data(uid)
 
 
-@app.get("/dash/user", summary="All information about you", response_model=UserDataResponse,
+@app.get("/dash/me", summary="All information about you", response_model=AllUserData,
          responses={400: {"description": "Incorrect token"}})
 async def account(request: Request, credentials: HTTPAuthorizationCredentials = fastapi.Depends(security)):
     try:
@@ -200,33 +242,53 @@ async def account(request: Request, credentials: HTTPAuthorizationCredentials = 
         result = lg.dbm.get_user(uid)
     except (InvalidTokenError, UserDoesntExist, AttributeError):
         raise fastapi.HTTPException(status_code=400, detail="Incorrect token")
-    logger.log(20, f"Successfully get all user data {uid}")
-    return UserDataResponse(id=result["id"], username=result["username"], name=result["name"], email=result["email"],
-                            avatar= result["avatar"], created_at=result["created_at"], is_admin=result["is_admin"],
-                            is_banned=result["is_banned"])
+    logger.log(20, f"Get all user data {uid}")
+    return await get_all_user_data(uid)
+
+
+@app.post("/dash/me", summary="Edit your name, avatar or description",
+          responses={400: {"description": "Incorrect token"}}, status_code=201)
+@limiter.limit("5/minute")
+async def edit_data(request: Request, data: UserEditData,
+                    credentials: HTTPAuthorizationCredentials = fastapi.Depends(security)):
+    try:
+        uid = await get_current_user(credentials.credentials)
+    except (InvalidTokenError, UserDoesntExist, AttributeError):
+        raise fastapi.HTTPException(status_code=400, detail="Incorrect token")
+    logger.log(20, f"Edit user data {uid}")
+    if not data.name is None:
+        lg.dbm.set_name(uid, data.name)
+    if not data.avatar is None:
+        lg.dbm.set_avatar(uid, data.avatar)
+    if not data.description is None:
+        lg.dbm.set_user_description(uid, data.description)
+    if not (data.avatar or data.description or data.name):
+        raise fastapi.HTTPException(status_code=400, detail="Nothing to change")
 
 
 @app.get("/dash/user/{username}/admin_data",
          summary="Info about user. Admins only",
-         response_model=UserDataResponse,
+         response_model=AllUserData,
          responses={
              400: {"description": "Incorrect token"},
-             403: {"description": "Not admin"}
+             403: {"description": "Not admin"},
+             404: {"description": "User not found"},
              })
 async def get_user_data_admin(request: Request, username: str,
                     credentials: HTTPAuthorizationCredentials = fastapi.Depends(security)):
     try:
         token = credentials.credentials
-        is_adm = await lg.is_admin(await get_current_user(token))
+        is_adm = await is_admin(token)
     except (InvalidTokenError, UserDoesntExist, AttributeError):
         raise fastapi.HTTPException(status_code=400, detail="Incorrect token")
     if not is_adm:
         raise fastapi.HTTPException(status_code=403, detail="Not admin")
-    user = lg.dbm.get_user(lg.dbm.get_user_id(username))
-    logger.log(20, f"Successfully get admin user data for {await get_current_user(token)}")
-    return UserDataResponse(id=user["id"], username=user["username"], name=user["name"], email=user["email"],
-                           is_banned=user["is_banned"], created_at=user["created_at"], avatar=user["avatar"],
-                           is_admin=user["is_admin"])
+    try:
+        user = lg.dbm.get_user(lg.dbm.get_user_id(username))
+    except UserDoesntExist:
+        raise fastapi.HTTPException(status_code=404, detail="User not found")
+    logger.log(20, f"Get admin user data of {username} for {await get_current_user(token)}")
+    return get_all_user_data(user["id"])
 
 
 @app.post("/dash/user/{username}/promote",
@@ -239,8 +301,7 @@ async def get_user_data_admin(request: Request, username: str,
           status_code=201)
 async def promote(username: str, credentials: HTTPAuthorizationCredentials = fastapi.Depends(security)):
     try:
-        token = credentials.credentials
-        is_adm = await lg.is_admin(await get_current_user(token))
+        is_adm = await is_admin(credentials.credentials)
     except (InvalidTokenError, UserDoesntExist, AttributeError):
         raise fastapi.HTTPException(status_code=400, detail="Incorrect token")
     if not is_adm:
@@ -266,8 +327,7 @@ async def promote(username: str, credentials: HTTPAuthorizationCredentials = fas
 )
 async def demote(username: str, credentials: HTTPAuthorizationCredentials = fastapi.Depends(security)):
     try:
-        token = credentials.credentials
-        is_adm = await lg.is_admin(await get_current_user(token))
+        is_adm = await is_admin(credentials.credentials)
     except (InvalidTokenError, UserDoesntExist, AttributeError):
         raise fastapi.HTTPException(status_code=400, detail="Incorrect token")
     if not is_adm:
@@ -291,16 +351,16 @@ async def demote(username: str, credentials: HTTPAuthorizationCredentials = fast
 async def upload_project(request: Request, data: ProjectCreate,
                          credentials: HTTPAuthorizationCredentials = (fastapi.Depends(security))):
     try:
-        token = credentials.credentials
-        uid = await get_current_user(token)
+        uid = await get_current_user(credentials.credentials)
     except (InvalidTokenError, UserDoesntExist, AttributeError):
         raise fastapi.HTTPException(status_code=400, detail="Incorrect token")
     logger.log(20, f"Successfully upload project {data.name} for user {uid}")
-    return await lg.load_project(uid, data.name, data.description, data.file, data.is_public)
+    return await lg.upload_project(uid, data.name, data.description, data.file, data.is_public)
 
 
 @app.get("/dash/project/{pid}",
-         summary="Get project from cloud",
+         summary="Get project from cloud. Token is optional, only needed for getting your private projects. Admins can"
+                 "see all private projects.",
          responses={
              400: {"description": "Incorrect token"},
              403: {"description": "Private project"},
@@ -312,15 +372,14 @@ async def get_project(pid: int, credentials: Optional[HTTPAuthorizationCredentia
         if credentials is None:
             uid = -1
         else:
-            token = credentials.credentials
-            uid = await get_current_user(token)
+            uid = await get_current_user(credentials.credentials)
     except (InvalidTokenError, UserDoesntExist):
         raise fastapi.HTTPException(status_code=400, detail="Incorrect token")
     try:
         data = await lg.get_project(pid)
     except ProjectDoesntExist:
         raise fastapi.HTTPException(status_code=404, detail="Project doesn't exist")
-    if data["is_public"] or data["uid"] == uid:
+    if data["is_public"] or data["uid"] == uid or await is_admin(credentials.credentials):
         logger.log(20, f"Successfully get project {pid} for user {uid}, public: {data['is_public']}")
         return ProjectData(name=data["name"], description=data["description"], file=data["file"],
                            author=data["author"], created_at=data["created_at"], is_public=data["is_public"])

@@ -1,5 +1,6 @@
 # coding=utf-8
 import sqlite3
+import os
 import base64
 from typing import Any
 
@@ -15,7 +16,7 @@ class UserAlreadyExists(Exception):
 class DBM:
     def __init__(self, db_file: str="db.db",
                  projects_path: str="data/projects/project_",
-                 avatars_path: str="data/projects/avatars/usr_") -> None:
+                 avatars_path: str="data/avatars/usr_") -> None:
         self.db_file = db_file
         self.projects_path = projects_path
         self.avatars_path = avatars_path
@@ -25,11 +26,15 @@ class DBM:
         connection = sqlite3.connect(self.db_file)
         return connection.cursor(), connection
 
-    def __write_to_file(self, path: str, data: bytes):
-        with open(path, "wb+") as f:
+    @staticmethod
+    def __write_to_file(path: str, data: bytes):
+        if not os.path.exists(os.path.dirname(path)):
+            os.makedirs(os.path.dirname(path))
+        with open(path, "wb") as f:
             f.write(data)
 
-    def __read_from_file(self, path: str) -> bytes:
+    @staticmethod
+    def __read_from_file(path: str) -> bytes:
         with open(path, "rb") as f:
             return f.read()
 
@@ -44,17 +49,21 @@ class DBM:
                           created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                           is_public BOOLEAN NOT NULL DEFAULT FALSE,
                           FOREIGN KEY(author_id) REFERENCES users(id) ON DELETE CASCADE);""")
-        cur.execute("""""")
 
         cur.execute("""CREATE TABLE IF NOT EXISTS users(
                           id INTEGER PRIMARY KEY AUTOINCREMENT,
                           username TEXT NOT NULL UNIQUE,
                           name TEXT NOT NULL,
+                          description TEXT,
                           email TEXT NOT NULL,
                           password_hash TEXT NOT NULL,
                           created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                           is_admin BOOLEAN NOT NULL DEFAULT FALSE,
                           is_banned BOOLEAN NOT NULL DEFAULT FALSE);""")
+        
+        cur.execute("SELECT COUNT(*) AS CNTREC FROM pragma_table_info('users') WHERE name='description'")
+        if not cur.fetchone()[0]:
+            cur.execute("""ALTER TABLE users ADD COLUMN description TEXT""")
 
         cur.execute("""CREATE TABLE IF NOT EXISTS reactions(
                           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -134,6 +143,7 @@ class DBM:
                 "username": result[1],
                 "name": result[2],
                 "avatar": avatar,
+                "description": result[8],
                 "email": result[3],
                 "password_hash": result[4],
                 "created_at": result[5],
@@ -164,7 +174,7 @@ class DBM:
             raise UserAlreadyExists
         cur, conn = self.__cursor_and_connection()
         with conn:
-            cur.execute("BEGIN TRANSACTION")
+            cur.execute("BEGIN TRANSACTION;")
             cur.execute("INSERT INTO users(username, name, password_hash, email) VALUES (?, ?, ?, ?) RETURNING id;",
                         (username, name, password_hash, email))
             uid = cur.fetchone()[0]
@@ -174,9 +184,27 @@ class DBM:
     def set_avatar(self, uid, avatar: str):
         if not self.__does_user_exist(uid):
             raise UserDoesntExist
-        file_data = base64.b64encode(avatar.encode())
+        file_data = base64.b64decode(avatar.encode())
         self.__write_to_file(self.avatars_path + str(uid), file_data)
     
+    def set_name(self, uid: int, name: str):
+        if not self.__does_user_exist(uid):
+            raise UserDoesntExist
+        cur, conn = self.__cursor_and_connection()
+        with conn:
+            cur.execute("BEGIN TRANSACTION;")
+            cur.execute("UPDATE users SET name = ? WHERE id = ?;", (name, uid))
+            conn.commit()
+    
+    def set_user_description(self, uid: int, description: str):
+        if not self.__does_user_exist(uid):
+            raise UserDoesntExist
+        cur, conn = self.__cursor_and_connection()
+        with conn:
+            cur.execute("BEGIN TRANSACTION;")
+            cur.execute("UPDATE users SET description = ? WHERE id = ?;", (description, uid))
+            conn.commit()
+            
     def get_all_users(self)-> list[dict[str, Any]]:
         cur, conn = self.__cursor_and_connection()
         with conn:

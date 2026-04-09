@@ -78,7 +78,7 @@ async def demote_user(username: str):
         raise NothingChangedException
 
 
-async def load_project(uid: int, name: str, description: str, file: str, is_public: bool) -> int:
+async def upload_project(uid: int, name: str, description: str, file: str, is_public: bool) -> int:
     return dbm.add_project(name, description, uid, file, is_public)
 
 

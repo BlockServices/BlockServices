@@ -12,19 +12,24 @@ class NothingChangedException(Exception):
 
 async def create_access_token(data: dict, expires_time: int, secret_key: str)-> str:
     to_encode = data.copy()
-    expire = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=expires_time)
-    to_encode.update({"exp": expire, "iat": datetime.datetime.now(datetime.timezone.utc), "iss": "blockservices"})
+    expire = (datetime.datetime.now(datetime.timezone.utc)
+              + datetime.timedelta(minutes=expires_time))
+    to_encode.update({"exp": expire,
+                      "iat": datetime.datetime.now(datetime.timezone.utc),
+                      "iss": "blockservices"})
     encoded_jwt = jwt.encode(to_encode, secret_key)
     return encoded_jwt
 
 
 async def get_uid_from_token(token, secret_key) -> str:
-    payload = jwt.decode(token, secret_key, algorithms={"HS256"}, issuer="blockservices")
+    payload = jwt.decode(token, secret_key, algorithms={"HS256"},
+                         issuer="blockservices")
     return payload["uid"]
 
 
 async def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return bcrypt.hashpw(password.encode(),
+                         bcrypt.gensalt()).decode()
 
 
 async def check_password(password: str, username: str) -> bool:
@@ -32,14 +37,17 @@ async def check_password(password: str, username: str) -> bool:
         password_in_db = dbm.get_user_psw_by_username(username)
     except UserDoesntExist:
         return False
-    old_method = await bsrv.hashing.check_hash(password, password_in_db)
+    old_method = await bsrv.hashing.check_hash(password,
+                                               password_in_db)
     try:
-        new_method = bcrypt.checkpw(password.encode(), password_in_db.encode())
+        new_method = bcrypt.checkpw(password.encode(),
+                                    password_in_db.encode())
     except ValueError:
         new_method = False
     if old_method:
         print(f"old method for {username}")
-        dbm.edit_password(dbm.get_user_id(username), await hash_password(password))
+        dbm.edit_password(dbm.get_user_id(username),
+                          await hash_password(password))
         return True
     if new_method:
         print(f"new method for {username}")
@@ -48,7 +56,8 @@ async def check_password(password: str, username: str) -> bool:
 
 
 async def register_user(password, username, name, email):
-    uid = dbm.add_user(username, name, await hash_password(password), email)
+    uid = dbm.add_user(username, name,
+                       await hash_password(password), email)
     return uid
 
 
@@ -76,10 +85,6 @@ async def demote_user(username: str):
         dbm.change_user_banned_status(uid, True)
     else:
         raise NothingChangedException
-
-
-async def upload_project(uid: int, name: str, description: str, file: str, is_public: bool) -> int:
-    return dbm.add_project(name, description, uid, file, is_public)
 
 
 async def get_project(pid: int) -> dict:

@@ -10,7 +10,8 @@ dbm = DBM()
 class NothingChangedException(Exception):
     pass
 
-async def create_access_token(data: dict, expires_time: int, secret_key: str)-> str:
+async def create_access_token(data: dict, expires_time: int,
+                              secret_key: str) -> str:
     to_encode = data.copy()
     expire = (datetime.datetime.now(datetime.timezone.utc)
               + datetime.timedelta(minutes=expires_time))

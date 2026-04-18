@@ -35,7 +35,7 @@ TOKEN_EXPIRE_MINUTES = int(os.getenv("TOKEN_EXPIRE_MINUTES"))
 app = fastapi.FastAPI(title="BlockServices",
                       description="BlockServices API and alternative "
                                   "Scratch API for Dashblocks",
-                      version="0.4.0",
+                      version="0.6.0",
                       redoc_url="/redocs",
                       license_info={"name": "GPL-3.0"},
                       copyright_holder="BlockMaster777")

@@ -10,4 +10,5 @@ if __name__ == "__main__":
     else:
         logger.log(20, "Running in production mode")
         uvicorn.run("bsrv.main:app", host="0.0.0.0", port=8443,
-                    ssl_keyfile=os.getenv("PRIVKEY_PATH"), ssl_certfile=os.getenv("FULLCHAIN_PATH"))
+                    ssl_keyfile=os.getenv("PRIVKEY_PATH"),
+                    ssl_certfile=os.getenv("FULLCHAIN_PATH"))

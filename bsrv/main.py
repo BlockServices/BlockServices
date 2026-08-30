@@ -28,6 +28,19 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import logging
 import os
@@ -223,7 +236,7 @@ def index():
     return "Welcome to BlockServices. Docs - blockservices.duckdns.org/docs"
 
 
-@app.post("/dash/auth/register",
+@app.post("/auth/register",
           summary="Register new user",
           response_model=UIDResponse,
           responses={400: {"description": "User already exists"}},
@@ -245,7 +258,7 @@ async def register(user: UserCreate, request: Request):
     return UIDResponse(uid=uid)
 
 
-@app.post("/dash/auth/login",
+@app.post("/auth/login",
           summary="Login into account",
           response_model=JWTResponse,
           responses={400: {"description": "Incorrect username or password"}})
@@ -275,7 +288,7 @@ async def login(user: UserLogin, request: Request):
                                     detail="Incorrect username or password")
 
 
-@app.get("/dash/user/{username}",
+@app.get("/user/{username}",
          summary="Public information about user",
          response_model=PublicUserData)
 async def get_user(username: str, request: Request):
@@ -288,7 +301,7 @@ async def get_user(username: str, request: Request):
      return await get_public_user_data(uid)
 
 
-@app.get("/dash/me", summary="All information about you",
+@app.get("/me", summary="All information about you",
          response_model=AllUserData,
          responses={400: {"description": "Incorrect token"}})
 async def account(request: Request,
@@ -304,7 +317,7 @@ async def account(request: Request,
     return result
 
 
-@app.patch("/dash/me", summary="Edit your name, avatar or description",
+@app.patch("/me", summary="Edit your name, avatar or description",
           responses={
               400: {"description": "Incorrect token or nothing to change"}
               },
@@ -329,7 +342,7 @@ async def edit_data(request: Request, data: UserEditData,
                                     detail="Nothing to change")
 
 
-@app.get("/dash/user/{username}/admin_data",
+@app.get("/user/{username}/admin_data",
          summary="Info about user. Admins only",
          response_model=AllUserData,
          responses={
@@ -356,7 +369,7 @@ async def get_user_data_admin(request: Request, username: str,
     return await get_all_user_data(user["id"])
 
 
-@app.post("/dash/user/{username}/promote",
+@app.post("/user/{username}/promote",
           summary="Promote a user, pardon a banned user. Admins only",
           responses={400: {"description": "Incorrect token or user is"
                                           "already banned"},
@@ -385,7 +398,7 @@ async def promote(request: Request, username: str,
 
 
 @app.post(
-    "/dash/user/{username}/demote",
+    "/user/{username}/demote",
     summary="Demote an admin, ban a user. Admins only",
     responses={
         400: {"description": "Incorrect token or user is already banned"},

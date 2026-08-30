@@ -1,11 +1,38 @@
 # coding=utf-8
+
+#  BlockServices
+#  Copyright (C) 2026  BlockMaster
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import sqlite3
 import os
 import base64
 from typing import Any
-
-class ProjectDoesntExist(Exception):
-    pass
 
 class UserDoesntExist(Exception):
     pass
@@ -15,10 +42,8 @@ class UserAlreadyExists(Exception):
 
 class DBM:
     def __init__(self, db_file: str="db.db",
-                 projects_path: str="data/projects/project_",
                  avatars_path: str="data/avatars/usr_") -> None:
         self.db_file = db_file
-        self.projects_path = projects_path
         self.avatars_path = avatars_path
         self.__create_tables()
 
@@ -42,16 +67,6 @@ class DBM:
     def __create_tables(self) -> None:
         cur, conn = self.__cursor_and_connection()
         cur.execute("BEGIN TRANSACTION")
-        cur.execute("CREATE TABLE IF NOT EXISTS projects("
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    "name TEXT NOT NULL,"
-                    "description TEXT,"
-                    "author_id INTEGER NOT NULL,"
-                    "created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
-                    "is_public BOOLEAN NOT NULL DEFAULT FALSE,"
-                    "FOREIGN KEY(author_id) REFERENCES users(id) ON DELETE "
-                    "CASCADE);")
-
         cur.execute("CREATE TABLE IF NOT EXISTS users("
                     "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                     "username TEXT NOT NULL UNIQUE,"
@@ -68,41 +83,9 @@ class DBM:
                     "FROM pragma_table_info('users') WHERE name='description'")
         if not cur.fetchone()[0]:
             cur.execute("""ALTER TABLE users ADD COLUMN description TEXT""")
-
-        cur.execute("CREATE TABLE IF NOT EXISTS reactions("
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    "type TEXT NOT NULL,"
-                    "user_id INTEGER NOT NULL,"
-                    "project_id INTEGER NOT NULL,"
-                    "UNIQUE(user_id, project_id, type),"
-                    "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE "
-                    "CASCADE,"
-                    "FOREIGN KEY(project_id) REFERENCES projects(id) "
-                    "ON DELETE CASCADE);")
-        
-        cur.execute("CREATE TABLE IF NOT EXISTS comments("
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    "user_id INTEGER NOT NULL,"
-                    "project_id INTEGER NOT NULL,"
-                    "text TEXT NOT NULL,"
-                    "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE "
-                    "CASCADE,"
-                    "FOREIGN KEY(project_id) REFERENCES projects(id) ON "
-                    "DELETE CASCADE);")
-        
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_reactions_project_id "
-                    "ON reactions(project_id);")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_reactions_project "
-                    "ON reactions(user_id, project_id);")
+            
         conn.commit()
         conn.close()
-
-    def __does_project_exist(self, project_id: int) -> bool:
-        cur, conn = self.__cursor_and_connection()
-        with conn:
-            cur.execute("""SELECT * FROM projects WHERE id = ?;""",
-                        (project_id,))
-            return bool(cur.fetchone())
 
     def __does_user_exist(self, user_id: int) -> bool:
         cur, conn = self.__cursor_and_connection()
@@ -117,34 +100,6 @@ class DBM:
             cur.execute("""SELECT * FROM users WHERE username = ?;""",
                         (username,))
             return bool(cur.fetchone())
-
-    def get_project(self, project_id: int) -> dict[str, Any]:
-        if not self.__does_project_exist(project_id):
-            raise ProjectDoesntExist
-        cur, conn = self.__cursor_and_connection()
-        with conn:
-            cur.execute("""SELECT * FROM projects WHERE id = ?;""",
-                        (project_id,))
-            result = cur.fetchone()
-            cur.execute("""SELECT COUNT(*) FROM reactions
-                               WHERE project_id = ? AND type = ?;""",
-                        (project_id, "like"))
-            likes = cur.fetchone()[0]
-            cur.execute("""SELECT COUNT(*) FROM reactions
-                               WHERE project_id = ? AND type = ?;""",
-                        (project_id, "fav"))
-            favorites = cur.fetchone()[0]
-        file = base64.b64encode(self.__read_from_file(
-                self.projects_path + str(project_id))).decode()
-        return {"id": result[0],
-                "name": result[1],
-                "description": result[2],
-                "author_id": result[3],
-                "created_at": result[4],
-                "is_public": result[5],
-                "likes": likes,
-                "favorites": favorites,
-                "file": file}
 
     def get_user(self, user_id: int) -> dict[str, Any]:
         if not self.__does_user_exist(user_id):
@@ -170,64 +125,6 @@ class DBM:
                 "created_at": result[5],
                 "is_admin": bool(result[6]),
                 "is_banned": bool(result[7])}
-
-    def add_project(self, name: str, description: str,
-                    author_id: int, file: str, is_public: bool) -> int:
-        if not self.__does_user_exist(author_id):
-            raise UserDoesntExist
-        cur, conn = self.__cursor_and_connection()
-        with conn:
-            cur.execute("BEGIN TRANSACTION")
-            cur.execute("INSERT INTO "
-                        "projects(name, description, author_id, is_public) "
-                        "VALUES (?, ?, ?, ?) RETURNING id;",
-                           (name, description, author_id, is_public))
-            pid = cur.fetchone()[0]
-            try:
-                self.__write_to_file(self.projects_path + str(pid),
-                                     base64.b64decode(file))
-            except Exception as e:
-                conn.rollback()
-                raise e
-            else:
-                conn.commit()
-        return pid
-
-    def edit_project_name(self, project_id: int, name: str):
-        if not self.__does_project_exist(project_id):
-            raise ProjectDoesntExist
-        cur, conn = self.__cursor_and_connection()
-        with conn:
-            cur.execute("BEGIN TRANSACTION")
-            cur.execute("UPDATE projects SET name = ? WHERE id = ?;",
-                        (name, project_id))
-
-    def edit_project_description(self, project_id: int, description: str):
-        if not self.__does_project_exist(project_id):
-            raise ProjectDoesntExist
-        cur, conn = self.__cursor_and_connection()
-        with conn:
-            cur.execute("BEGIN TRANSACTION")
-            cur.execute("UPDATE projects SET description = ? "
-                        "WHERE id = ?;",
-                        (description, project_id))
-
-    def edit_project_file(self, project_id: int, file: str):
-        if not self.__does_project_exist(project_id):
-            raise ProjectDoesntExist
-        self.__write_to_file(self.projects_path + str(project_id),
-                             base64.b64decode(file))
-    
-    
-    def edit_project_publicity(self, project_id: int, is_public: bool):
-        if not self.__does_project_exist(project_id):
-            raise ProjectDoesntExist
-        cur, conn = self.__cursor_and_connection()
-        with conn:
-            cur.execute("BEGIN TRANSACTION")
-            cur.execute("UPDATE projects SET is_public = ? WHERE id = ?;",
-                        (is_public, project_id))
-        
 
     def add_user(self, username: str, name: str,
                  password_hash: str, email: str) -> int:

@@ -1,4 +1,34 @@
 # coding=utf-8
+
+#  BlockServices
+#  Copyright (C) 2026  BlockMaster
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import logging
 import os
 import secrets
@@ -16,7 +46,7 @@ from jwt import InvalidTokenError
 from pydantic import BaseModel, Field
 
 import bsrv.logic as lg
-from bsrv.dbm import UserAlreadyExists, UserDoesntExist, ProjectDoesntExist
+from bsrv.dbm import UserAlreadyExists, UserDoesntExist
 
 load_dotenv()
 
@@ -30,12 +60,12 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 JWT_SECRET = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
+# noinspection PyTypeChecker
 TOKEN_EXPIRE_MINUTES = int(os.getenv("TOKEN_EXPIRE_MINUTES"))
 
 app = fastapi.FastAPI(title="BlockServices",
-                      description="BlockServices API and alternative "
-                                  "Scratch API for Dashblocks",
-                      version="0.6.0",
+                      description="BlockServices API",
+                      version="0.8.0",
                       redoc_url="/redocs",
                       license_info={"name": "GPL-3.0"},
                       copyright_holder="BlockMaster777")
@@ -49,6 +79,7 @@ app.add_middleware(slowapi.middleware.SlowAPIMiddleware)
 app.add_exception_handler(slowapi.errors.RateLimitExceeded,
                           slowapi._rate_limit_exceeded_handler)
 
+# noinspection PyTypeChecker
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -135,47 +166,9 @@ class UserEditData(BaseModel):
                                        default=None)
 
 
-class ProjectCreate(BaseModel):
-    name: str = Field(description="Project name",
-                      examples=["Project 123", "Kitten Parkour", "Untitled-1"])
-    description: str = Field(description="Project description",
-                             examples=["Best project, controls - ..."])
-    file: str = Field(description="Project file in base64 format")
-    is_public: bool = Field(description="Is project public",
-                            examples=[True, False])
-
-
-class ProjectEdit(BaseModel):
-    pid: int = Field(description="Project id", examples=[7385, 866747, 67485])
-    name: Optional[str] = Field(description="Project name",
-                                examples=["Project 123", "Kitten Parkour",
-                                          "Untitled-1"],
-                                default=None)
-    description: Optional[str] = Field(description="Project description",
-                                       examples=["Best project, controls - ..."],
-                                       default=None)
-    file: Optional[str] = Field(description="Project file in base64 format",
-                                default=None)
-    is_public: Optional[bool] = Field(description="Is project public",
-                                      examples=[True, False], default=None)
-
-
-class ProjectData(BaseModel):
-    name: str = Field(description="Project name",
-                      examples=["Project 123", "Kitten Parkour", "Untitled-1"])
-    description: str = Field(description="Project description",
-                             examples=["Best project, controls - ..."])
-    author: str = Field(description="Project author",
-                        examples=["user123", "MarkusPerson", "DBDev"])
-    file: str = Field(description="Project file in base64 format")
-    created_at: str = Field(description="Project creation date")
-    is_public: bool = Field(description="Is project public",
-                            examples=[True, False])
-
-
 async def get_current_user(token: str) ->  int:
     credentials_exception = fastapi.HTTPException(
-            status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+            status_code=401,
             detail="Could not validate credentials"
             )
     try:
@@ -304,11 +297,11 @@ async def account(request: Request,
     try:
         token = credentials.credentials
         uid = await get_current_user(token)
-        result = lg.dbm.get_user(uid)
+        result = await get_all_user_data(uid)
     except (InvalidTokenError, UserDoesntExist, AttributeError):
         raise fastapi.HTTPException(status_code=400, detail="Incorrect token")
     logger.log(20, f"Get all user data {uid}")
-    return await get_all_user_data(uid)
+    return result
 
 
 @app.patch("/dash/me", summary="Edit your name, avatar or description",
@@ -325,11 +318,11 @@ async def edit_data(request: Request, data: UserEditData,
     except (InvalidTokenError, UserDoesntExist, AttributeError):
         raise fastapi.HTTPException(status_code=400, detail="Incorrect token")
     logger.log(20, f"Edit user data {uid}")
-    if not data.name is None:
+    if data.name is not None:
         lg.dbm.set_name(uid, data.name)
-    if not data.avatar is None:
+    if data.avatar is not None:
         lg.dbm.set_avatar(uid, data.avatar)
-    if not data.description is None:
+    if data.description is not None:
         lg.dbm.set_user_description(uid, data.description)
     if not (data.avatar or data.description or data.name):
         raise fastapi.HTTPException(status_code=400,
@@ -360,7 +353,7 @@ async def get_user_data_admin(request: Request, username: str,
         raise fastapi.HTTPException(status_code=404, detail="User not found")
     logger.log(20, f"Get admin user data of {username} for "
                    f"{await get_current_user(token)}")
-    return get_all_user_data(user["id"])
+    return await get_all_user_data(user["id"])
 
 
 @app.post("/dash/user/{username}/promote",
@@ -371,7 +364,7 @@ async def get_user_data_admin(request: Request, username: str,
                      404: {"description": "User not found"}
               },
           status_code=201)
-async def promote(username: str,
+async def promote(request: Request, username: str,
                   credentials: HTTPAuthorizationCredentials =
                   fastapi.Depends(security)):
     try:
@@ -401,7 +394,7 @@ async def promote(username: str,
         },
     status_code=201,
 )
-async def demote(username: str,
+async def demote(request: Request, username: str,
                  credentials: HTTPAuthorizationCredentials =
                  fastapi.Depends(security)):
     try:
@@ -424,100 +417,8 @@ async def demote(username: str,
     logger.log(20, f"Successfully demote user {username}")
 
 
-@app.post("/dash/project",
-          summary="Upload new project to cloud",
-          responses={400: {"description": "Incorrect token"}},
-          status_code=201)
-@limiter.limit("1/hour")
-async def upload_project(request: Request, data: ProjectCreate,
-                         credentials: HTTPAuthorizationCredentials
-                         = fastapi.Depends(security)):
-    try:
-        uid = await get_current_user(credentials.credentials)
-    except (InvalidTokenError, UserDoesntExist, AttributeError):
-        raise fastapi.HTTPException(status_code=400, detail="Incorrect token")
-    logger.log(20, f"Uploading project {data.name} for user {uid}")
-    return await lg.dbm.add_project(data.name, data.description, uid,
-                                    data.file, data.is_public)
-
-
-@app.patch("/dash/project",
-           summary="Update existing project",
-           responses={400: {"description":  "Incorrect token or nothing to "
-                                           "change"},
-                      404: {"description": "Project not found"},
-                      403: {"description": "Private project of other user"}},
-           status_code=201)
-@limiter.limit("1/minute")
-async def update_project(request: Request, data: ProjectEdit,
-                         credentials: HTTPAuthorizationCredentials =
-                         fastapi.Depends(security)):
-    try:
-        uid = await get_current_user(credentials.credentials)
-    except (InvalidTokenError, UserDoesntExist, AttributeError):
-        raise fastapi.HTTPException(status_code=400, detail="Incorrect token")
-    if not ((pdata := await lg.get_project(data.pid))["is_public"]
-            or pdata["uid"] == uid):
-        raise fastapi.HTTPException(status_code=403,
-                                    detail="Private project of other user")
-    logger.log(20, f"Updating project {data.name} for user {uid}")
-    pid = data.pid
-    if not data.name is None:
-        lg.dbm.edit_project_name(pid, data.name)
-    if not data.description is None:
-        lg.dbm.edit_project_description(pid, data.description)
-    if not data.file is None:
-        lg.dbm.edit_project_file(pid, data.file)
-    if not data.is_public is None:
-        lg.dbm.edit_project_publicity(pid, data.is_public)
-    if not (data.name or data.description or data.file or data.is_public):
-        raise fastapi.HTTPException(status_code=400,
-                                    detail="Nothing to change")
-
-
-
-@app.get("/dash/project/{pid}",
-         summary="Get project from cloud. Token is optional, "
-                 "only needed for getting your private projects. Admins can"
-                 "see all private projects.",
-         responses={
-             400: {"description": "Incorrect token"},
-             403: {"description": "Private project"},
-             404: {"description": "Project not found"}
-             },
-         response_model=ProjectData)
-async def get_project(pid: int,
-                      credentials: Optional[HTTPAuthorizationCredentials] =
-                      fastapi.Depends(security)):
-    try:
-        if credentials is None:
-            uid = -1
-        else:
-            uid = await get_current_user(credentials.credentials)
-    except (InvalidTokenError, UserDoesntExist):
-        raise fastapi.HTTPException(status_code=400, detail="Incorrect token")
-    try:
-        data = await lg.get_project(pid)
-    except ProjectDoesntExist:
-        raise fastapi.HTTPException(status_code=404,
-                                    detail="Project doesn't exist")
-    if (data["is_public"] or data["uid"] == uid
-            or await is_admin(credentials.credentials)):
-        logger.log(20, f"Successfully get project {pid} for "
-                       f"user {uid}, public: {data['is_public']}")
-        return ProjectData(name=data["name"],
-                           description=data["description"],
-                           file=data["file"],
-                           author=data["author"],
-                           created_at=data["created_at"],
-                           is_public=data["is_public"])
-    else:
-        raise fastapi.HTTPException(status_code=403,
-                                    detail="Private project of other user")
-
-
 @app.get("/robots.txt")
 async def robots(request: fastapi.Request):
+     # noinspection PyUnresolvedReferences
      logger.log(20, f"Robot with ip {request.client.host}")
-     return {"Content-Type": "text/plain",
-             "body": "User-agent: *\nDisallow: /"}
+     return "User-agent: *\nDisallow: /"

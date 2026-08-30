@@ -1,7 +1,37 @@
 # coding=utf-8
+
+#  BlockServices
+#  Copyright (C) 2026  BlockMaster
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import bsrv.hashing
 import bcrypt
-from bsrv.dbm import *
+from bsrv.dbm import DBM, UserDoesntExist
 import datetime
 import jwt
 
@@ -10,21 +40,27 @@ dbm = DBM()
 class NothingChangedException(Exception):
     pass
 
+# {
+#   "sub": int,
+#   "is_admin": bool,
+#   "exp": int,
+#   "iss": str
+# }
 async def create_access_token(data: dict, expires_time: int,
                               secret_key: str) -> str:
     to_encode = data.copy()
     expire = (datetime.datetime.now(datetime.timezone.utc)
               + datetime.timedelta(minutes=expires_time))
     to_encode.update({"exp": expire,
-                      "iat": datetime.datetime.now(datetime.timezone.utc),
-                      "iss": "blockservices"})
+                      "iss": "BlockServices Auth System",
+                      "is_admin": bool(await is_admin(data["uid"]))})
     encoded_jwt = jwt.encode(to_encode, secret_key)
     return encoded_jwt
 
 
 async def get_uid_from_token(token, secret_key) -> str:
     payload = jwt.decode(token, secret_key, algorithms={"HS256"},
-                         issuer="blockservices")
+                         issuer="BlockServices Auth System")
     return payload["uid"]
 
 
@@ -86,14 +122,3 @@ async def demote_user(username: str):
         dbm.change_user_banned_status(uid, True)
     else:
         raise NothingChangedException
-
-
-async def get_project(pid: int) -> dict:
-    data =  dbm.get_project(pid)
-    return {"name": data["name"],
-            "description": data["description"],
-            "author": dbm.get_user(data["author_id"])["username"],
-            "uid": data["author_id"],
-            "file": data["file"],
-            "created_at": data["created_at"],
-            "is_public": data["is_public"]}
